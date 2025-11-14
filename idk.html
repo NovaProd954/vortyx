@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Vortyx Typhoon Tracker – TY UWAN (FUNG-WONG)</title>
+  
+  <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
+  <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet" />
+  <script src="https://cdn.maptiler.com/maptiler-weather/v3.1.1/maptiler-weather.umd.min.js"></script>
+  
+  <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+  
+  <style>
+    /* -------------------------------------- */
+    /* CORE STYLES & LAYOUT (Vortyx/Zoom Earth Theme) */
+    /* -------------------------------------- */
+    html, body { 
+        height:100%; 
+        margin:0; 
+        padding:0; 
+        background-color: #0d1117; 
+        overflow: hidden; /* Prevent scrolling */
+    }
+    #map { 
+        position:absolute; 
+        inset:0; 
+        height: 100vh; /* Critical: Ensure map container has height */
+        width: 100vw; /* Critical: Ensure map container has width */
+        background-color: #1a1a1a; 
+    } 
+    body { 
+        font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; 
+        color: #fff;
+    }
+
+    /* -------------------------------------- */
+    /* VORTYX LOGO & APP NAME */
+    /* -------------------------------------- */
+    #app-header {
+        position: absolute; top: 15px; left: 15px; z-index: 1000;
+        display: flex; align-items: center; gap: 10px;
+        color: #e0e0e0; font-size: 18px; font-weight: 600;
+        text-shadow: 0px 1px 3px rgba(0,0,0,0.5);
+    }
+    #app-logo-svg {
+        width: 32px; height: 32px;
+        /* Custom styles for the SVG to fit the dark theme */
+    }
+    #app-name {
+        margin-top: 2px; /* Visual alignment */
+    }
+
+    /* -------------------------------------- */
+    /* LEFT MENU PANEL */
+    /* -------------------------------------- */
+    #menu-panel {
+        position: absolute; top: 70px; left: 15px; z-index: 1000;
+        background: rgba(0,0,0,0.7); 
+        padding: 10px; border-radius: 12px;
+        backdrop-filter: blur(10px);
+        width: 200px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    .menu-section {
+        margin-bottom: 15px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: 10px;
+    }
+    .menu-section:last-child {
+        margin-bottom: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .menu-section-title {
+        font-size: 14px; font-weight: 600;
+        color: #ffffff; opacity: 0.9;
+        margin-bottom: 8px;
+        padding-left: 5px;
+    }
+
+    .menu-item {
+        display: flex; align-items: center;
+        padding: 8px 5px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s, color 0.2s;
+        font-size: 13px;
+        font-weight: 500;
+        color: #e0e0e0;
+    }
+    .menu-item:hover {
+        background-color: rgba(255,255,255,0.1);
+    }
+    .menu-item.active {
+        background-color: #2196F3;
+        color: #ffffff;
+        font-weight: 600;
+    }
+    .menu-item.active:hover {
+        background-color: #1a7bb5;
+    }
+    .menu-item-icon {
+        width: 20px; height: 20px; margin-right: 10px;
+        color: inherit; /* Inherit color from parent for SVG icons */
+    }
+
+    /* Specific icon colors (if needed, otherwise inherit) */
+    .icon-satellite { /* fill: #fff; */ }
+    .icon-radar { /* fill: #fff; */ }
+    /* etc. */
+
+    /* -------------------------------------- */
+    /* BOTTOM ANIMATION CONTROLS (remains centered) */
+    /* -------------------------------------- */
+    #animation-controls {
+        position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); z-index: 1000;
+        background: rgba(0,0,0,0.7); 
+        padding: 8px 15px; border-radius: 12px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        display: flex; align-items: center; gap: 10px;
+        color: #e0e0e0;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    #animation-time {
+        min-width: 100px;
+        text-align: center;
+        font-weight: 600;
+        color: #f7f7f7;
+    }
+    .anim-btn {
+        background: none; border: none; color: #e0e0e0;
+        cursor: pointer; font-size: 20px; padding: 5px;
+        transition: color 0.2s, transform 0.1s;
+    }
+    .anim-btn:hover { color: #fff; transform: scale(1.1); }
+    .anim-btn:active { transform: scale(0.95); }
+    .anim-btn.play-pause { font-size: 28px; line-height: 1; } /* Larger for play/pause */
+
+    /* -------------------------------------- */
+    /* TOP RIGHT INFO (Typhoon Info Panel - remains fixed top-right) */
+    /* -------------------------------------- */
+    #info-panel {
+      position:absolute; top:15px; right:15px; max-width: 280px;
+      background:rgba(0,0,0,0.7); 
+      padding:10px 12px; border-radius:12px;
+      font-size:12px; z-index:1000; backdrop-filter:blur(10px);
+      border-right: 4px solid #2196F3; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    #info-panel h3 { margin: 0 0 5px 0; font-size: 15px; font-weight: 600; color: #ffeb3b; }
+    #info-panel .issued { font-size: 10px; opacity: 0.8; color: #ccc; }
+    #info-panel .issued span { font-weight: bold; color: #e0e0e0; }
+
+
+    /* -------------------------------------- */
+    /* RIGHT SIDE LEGENDS */
+    /* -------------------------------------- */
+    
+    /* Track Legend: Top Right, below info panel */
+    #legend-container-icons { 
+      position: absolute; top: 150px; right: 15px; z-index: 1000;
+      background:rgba(0,0,0,0.7); color:#fff;
+      padding:10px; border-radius:8px;
+      font-size:12px;
+      backdrop-filter:blur(8px);
+      max-width: 250px; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .legend-item {
+      display: flex; align-items: center; margin-bottom: 5px;
+    }
+    .legend-icon {
+      width: 24px; height: 24px; margin-right: 8px;
+    }
+    
+    /* Weather Legend: NEW POSITION - Bottom Right */
+    #legend-container-weather {
+        position:absolute; 
+        bottom: 15px; 
+        right: 15px; /* Fixed to the right */
+        left: unset; /* Remove centering property */
+        transform: none; /* Remove centering property */
+        background:rgba(0,0,0,0.7); color:#fff;
+        padding:10px; border-radius:8px;
+        font-size:12px; z-index:1000;
+        backdrop-filter:blur(8px);
+        width: 200px; 
+        display: none; 
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .legend-bar {
+        height: 12px;
+        margin-bottom: 5px;
+        border-radius: 2px;
+        border: 1px solid rgba(255, 255, 255, 0.4); 
+    }
+    .legend-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 2px;
+        font-size: 10px;
+        opacity: 0.8;
+    }
+
+    /* POPUP STYLING (High Contrast) */
+    .mapboxgl-popup-content {
+      padding: 10px 15px;
+      font-family: system-ui;
+      font-size: 13px;
+      background: rgba(0,0,0,0.9);
+      color: #fff;
+    }
+    .mapboxgl-popup-tip {
+        border-bottom-color: rgba(0,0,0,0.9) !important;
+    }
+    .popup-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #FFEB3B; 
+    }
+    .popup-line { margin-top: 3px; }
+
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="app-header">
+    <div id="app-logo-svg">
+        <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#00C4FF"/>
+                    <stop offset="100%" stop-color="#0052CC"/>
+                </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="200" height="200" rx="40" ry="40" fill="url(#bgGrad)"/>
+            <path d="M50,60 C95,170, 105,170, 150,60 L135,60 C100,130, 90,130, 65,60 Z"
+                    fill="none"
+                    stroke="white"
+                    stroke-width="8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-dasharray="600"
+                    stroke-dashoffset="600">
+                <animate attributeName="stroke-dashoffset"
+                        from="600"
+                        to="0"
+                        dur="1.8s"
+                        repeatCount="indefinite"/>
+            </path>
+        </svg>
+    </div>
+    <span id="app-name">Vortyx</span>
+</div>
+
+<div id="menu-panel">
+    <div class="menu-section">
+        <div class="menu-section-title">WEATHER MAPS</div>
+        <div class="menu-item active" id="menu-satellite" data-style="SATELLITE">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4-10h-2V7h-4v3H8l4 4 4-4z"/></svg>
+            Satellite
+        </div>
+        <div class="menu-item" id="menu-dark" data-style="DARK_DATAVIZ">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.31V8.69L16.69 4H8.69L4 8.69v6.62L7.31 20h6.62L20 15.31zM12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
+            Dark
+        </div>
+        <div class="menu-item" id="menu-streets" data-style="STREETS">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-10h-2V7h-4v3H8l4 4 4-4z"/></svg>
+            Streets
+        </div>
+    </div>
+
+    <div class="menu-section">
+        <div class="menu-section-title">WEATHER LAYERS</div>
+        <div class="menu-item" id="layer-radar" data-layer="Radar">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2z"/></svg>
+            Radar
+        </div>
+        <div class="menu-item" id="layer-cloud" data-layer="Cloud">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.86 8.32 1 10.59 1 13c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+            Clouds
+        </div>
+        <div class="menu-item" id="layer-wind" data-layer="Wind">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.95 7.95 0 0020 12c0-4.42-3.58-8-8-8zm-8 8c0-1.01.25-1.97.7-2.8L3.24 7.74A7.95 7.95 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/></svg>
+            Wind
+        </div>
+        <div class="menu-item" id="layer-temp" data-layer="Temp">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 10H6c0-2.21 1.79-4 4-4v2c-1.1 0-2 .9-2 2zm0 4H6c0 2.21 1.79 4 4 4v-2c-1.1 0-2-.9-2-2zm6-4h-2v4h2c2.21 0 4-1.79 4-4s-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2v-4z"/></svg>
+            Temperature
+        </div>
+        <div class="menu-item" id="layer-himawari" data-layer="Himawari">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+            Himawari (IR)
+        </div>
+        <div class="menu-item" id="layer-precipitation" data-layer="Precipitation">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 4c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+            Precipitation
+        </div>
+        <div class="menu-item" id="layer-humidity" data-layer="Humidity">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-12h4v2h-4zm0 4h4v2h-4z"/></svg>
+            Humidity
+        </div>
+        <div class="menu-item" id="layer-pressure" data-layer="Pressure">
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-9h8v2h-8z"/></svg>
+            Pressure
+        </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-title">TRACK & ANIMATION</div>
+      <div class="menu-item active" id="menu-track-toggle">
+        <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+        Hide Track
+      </div>
+    </div>
+</div>
+
+
+<div id="info-panel">
+  <h3>TYPHOON UWAN (FUNG-WONG)</h3>
+  <div class="issued">JTWC Warning: <span id="issued-time">NR 027 (101800Z)</span></div>
+</div>
+
+<div id="legend-container-icons">
+    <strong>Track Legend:</strong>
+    <div id="legend-icons">
+    </div>
+    <div style="margin-top: 5px; border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 5px;">
+        <div class="legend-item"><span style="width:10px; height:10px; border-radius:50%; background:#FF0000; margin-right:8px;"></span>Forecast Track Line</div>
+        <div class="legend-item"><span style="width:10px; height:10px; border-radius:50%; background:#FFFF00; margin-right:8px;"></span>Past/Current Track Line</div>
+    </div>
+</div>
+
+<div id="animation-controls">
+    <button class="anim-btn prev-btn" id="anim-prev"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg></button>
+    <button class="anim-btn play-pause" id="anim-play-pause"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>
+    <button class="anim-btn next-btn" id="anim-next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg></button>
+    <div id="animation-time">22 Mar 18 : 05</div>
+</div>
+
+
+<div id="legend-container-weather">
+    <div id="weather-legend-content"></div>
+</div>
+
+<script>
+// !!! CRITICAL: REPLACE THIS WITH YOUR VALID MAPTILER API KEY !!!
+maptilersdk.config.apiKey = "oBs59fy19AM2IhfJXOvI";
+
+// --- GLOBAL VARIABLES ---
+const map = new maptilersdk.Map({
+  container: "map",
+  style: maptilersdk.MapStyle.SATELLITE, 
+  center: [120.0, 19.5], 
+  zoom: 6.0
+});
+
+let radarLayer = null; 
+let cloudLayer = null; 
+let windLayer = null; 
+let tempLayer = null; 
+let himawariLayer = null; 
+let trackVisible = true; 
+let popup; 
+let isAnimating = false;
+let animationInterval = null;
+let currentAnimationFrame = 0;
+let animationTimeSpan = document.getElementById('animation-time');
+let playPauseButton = document.getElementById('anim-play-pause');
+let activeWeatherLayerRef = null; // Reference to the currently active weather layer
+
+// --- UTILITY FUNCTIONS ---
+function averageRadii(rNE, rSE, rSW, rNW) {
+    const arr = [rNE, rSE, rSW, rNW].filter(val => val > 0);
+    if (arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b) / arr.length;
+}
+
+function convertDate(isoString) {
+    const date = new Date(isoString);
+    const options = { 
+        year: 'numeric', month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit', 
+        hour12: false, timeZone: 'UTC', 
+        timeZoneName: 'short' 
+    };
+    return date.toLocaleString('en-US', options).replace('GMT', 'Z');
+}
+
+function getGIBSDate(offsetDays = 0) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() + offsetDays); 
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// --- ICON SVG GENERATION FUNCTIONS ---
+function createIconSVG(type, size = 32) {
+  const blueColor = '#0070FF'; 
+  const redColor = '#C0392B'; 
+  const innerColor = '#FFFFFF';
+  let color = blueColor;
+  let innerShape = '';
+  let finalType = type;
+
+  if (type === 'CURRENT') { color = redColor; finalType = 'T'; }
+  if (type === 'PAST') { finalType = 'T'; }
+
+  switch (finalType) {
+    case 'T': 
+      innerShape = `<rect x="10" y="8" width="12" height="4" fill="${innerColor}"/><rect x="14" y="8" width="4" height="16" fill="${innerColor}"/>`;
+      break;
+    case 'S': 
+      innerShape = `<path d="M 16 2 A 14 14 0 0 1 16 30" stroke="${innerColor}" stroke-width="4" fill="none"/>`;
+      break;
+    case 'L': 
+      innerShape = `<path d="M12 16L20 16" stroke="${innerColor}" stroke-width="4" stroke-linecap="round"/>`;
+      break;
+    default:
+      innerShape = `<circle cx="16" cy="16" r="10" fill="transparent" stroke="${innerColor}" stroke-width="4"/>`;
+      break;
+  }
+
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" fill="${color}" stroke="#000" stroke-width="1"/>
+      ${innerShape}
+    </svg>
+  `;
+}
+
+// ----------------------------------------------------------------------------------
+// --- DATA: FUNG-WONG (UWAN) Coordinates ---
+// ----------------------------------------------------------------------------------
+const trackGeoJSON = {
+  "type": "FeatureCollection",
+  "features": [
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [119.5, 17.0] }, 
+      "properties": { 
+        "time": "2025-11-10T12:00Z", "wind_kt": 70, "label": "Past 12Z", "stage": "PAST", "icon_name": "tc-icon-PAST",
+        "r64": 0, "r50": 0, "r34": 0, "category": "Typhoon (T)" 
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [118.3, 18.8] }, 
+      "properties": { 
+        "time": "2025-11-10T18:00Z", "wind_kt": 65, "label": "Current (65 kt)", "stage": "CURRENT", "icon_name": "tc-icon-CURRENT",
+        "r64": averageRadii(35, 50, 55, 60), "r50": averageRadii(65, 65, 95, 140), "r34": averageRadii(235, 150, 160, 250), "category": "Typhoon (T)"
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [118.3, 20.0] }, 
+      "properties": { 
+        "time": "2025-11-11T06:00Z", "wind_kt": 60, "label": "+12h (60 kt)", "stage": "T", "icon_name": "tc-icon-T",
+        "r64": 0, "r50": averageRadii(20, 40, 60, 90), "r34": averageRadii(270, 150, 140, 230), "category": "Severe Tropical Storm (S)" 
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [118.6, 21.1] }, 
+      "properties": { 
+        "time": "2025-11-11T18:00Z", "wind_kt": 55, "label": "+24h (55 kt)", "stage": "S", "icon_name": "tc-icon-S",
+        "r64": 0, "r50": averageRadii(10, 10, 40, 60), "r34": averageRadii(280, 120, 110, 200), "category": "Severe Tropical Storm (S)"
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [119.5, 22.3] }, 
+      "properties": { 
+        "time": "2025-11-12T06:00Z", "wind_kt": 50, "label": "+36h (50 kt)", "stage": "S", "icon_name": "tc-icon-S",
+        "r64": 0, "r50": averageRadii(20, 10, 50, 60), "r34": averageRadii(300, 80, 80, 190), "category": "Severe Tropical Storm (S)"
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [121.1, 23.6] }, 
+      "properties": { 
+        "time": "2025-11-12T18:00Z", "wind_kt": 35, "label": "+48h (35 kt)", "stage": "S", "icon_name": "tc-icon-S",
+        "r64": 0, "r50": 0, "r34": averageRadii(230, 80, 110, 150), "category": "Tropical Storm (S)" 
+      } 
+    },
+    { 
+      "type": "Feature", "geometry": { "type": "Point", "coordinates": [124.6, 25.2] }, 
+      "properties": { 
+        "time": "2025-11-13T18:00Z", "wind_kt": 30, "label": "+72h (30 kt)", "stage": "L", "icon_name": "tc-icon-L",
+        "r64": 0, "r50": 0, "r34": 0, "category": "Dissipated (L)"
+      } 
+    },
+  ]
+};
+// ----------------------------------------------------------------------------------
+
+
+// --- CORE MAP LOGIC: Track Layers ---
+
+function addTrackLayers(){
+  // Only proceed if track is currently hidden (trackVisible is false)
+  if (trackVisible) return; 
+
+  const coords = trackGeoJSON.features.map(f => f.geometry.coordinates);
+  
+  map.addSource('track-line-src', { type: 'geojson', data: turf.lineString(coords) });
+  map.addLayer({ 
+      id: 'track-line', 
+      type: 'line', 
+      source: 'track-line-src', 
+      paint: {
+        'line-color': [
+          'case',
+          ['<=', ['line-progress'], 0.2], 
+          '#FFFF00', 
+          '#FF0000' 
+        ],
+        'line-width': 3,
+        'line-dasharray': [
+          'case',
+          ['<=', ['line-progress'], 0.2],
+          ['literal', [1, 0]], 
+          ['literal', [3, 2]]
+        ],
+      }
+  });
+
+
+  map.addSource('track-points-src', { type: 'geojson', data: trackGeoJSON });
+  map.addLayer({
+    id: 'track-points-layer', 
+    type: 'symbol',
+    source: 'track-points-src',
+    interactive: true, 
+    layout: {
+      'icon-image': ['get', 'icon_name'], 
+      'icon-size': 1.0, 
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+      'text-size': 10,
+      'text-offset': [0, 2.0], 
+      'text-anchor': 'top',
+      'text-allow-overlap': false,
+      'text-ignore-placement': false,
+      'text-max-angle': 0 
+    },
+    paint: {
+        'text-color': '#FFFFFF',
+        'text-halo-color': '#000000',
+        'text-halo-width': 1
+    }
+  });
+
+  const bounds = coords.reduce((b, c) => b.extend(c), new maptilersdk.LngLatBounds(coords[0], coords[0]));
+  map.fitBounds(bounds, { padding: 100, duration: 1200 });
+  
+  trackVisible = true;
+  document.getElementById('menu-track-toggle').textContent = "Hide Track";
+}
+
+function removeTrackLayers(){
+  if (!trackVisible) return;
+  const layersToRemove = ['track-line', 'track-points-layer'];
+  const sourcesToRemove = ['track-line-src', 'track-points-src'];
+  layersToRemove.forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+  sourcesToRemove.forEach(id => { 
+    if (map.getSource(id)) {
+        try {
+            map.removeSource(id);
+        } catch(e) {
+            // Safe removal for when map is changing style
+            console.warn(`Could not remove source ${id}: ${e.message}`);
+        }
+    }
+  });
+  
+  if (popup) popup.remove();
+  
+  trackVisible = false;
+  document.getElementById('menu-track-toggle').textContent = "Show Track";
+}
+
+// --- POPUP HANDLER ---
+function addPopupHandler() {
+    popup = new maptilersdk.Popup({
+        closeButton: true,
+        closeOnClick: true
+    });
+
+    map.on('click', 'track-points-layer', (e) => {
+        if (!e.features.length) return;
+
+        const feature = e.features[0];
+        const coordinates = feature.geometry.coordinates.slice();
+        const props = feature.properties;
+
+        if (!props.time || !props.wind_kt || !props.category) {
+            return;
+        }
+
+        const content = `
+            <div class="popup-title">Typhoon UWAN (${props.category})</div>
+            <div class="popup-line"><strong>Time:</strong> ${convertDate(props.time)}</div>
+            <div class="popup-line"><strong>Position:</strong> ${coordinates[1].toFixed(1)}°N ${coordinates[0].toFixed(1)}°E</div>
+            <div class="popup-line"><strong>Max Sustained Wind:</strong> ${props.wind_kt} KT</div>
+        `;
+
+        popup
+            .setLngLat(coordinates)
+            .setHTML(content)
+            .addTo(map);
+    });
+
+    map.on('mouseenter', 'track-points-layer', () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.on('mouseleave', 'track-points-layer', () => {
+        map.getCanvas().style.cursor = '';
+    });
+}
+
+
+// --- LEGEND POPULATION ---
+function populateLegend() {
+    const iconTypes = [
+        { type: 'CURRENT', label: 'Current Position (T)' },
+        { type: 'T', label: 'Typhoon (T)' },             
+        { type: 'S', label: 'Tropical/Severe Tropical Storm (S)' },           
+        { type: 'L', label: 'Low Pressure Area (L)' }              
+    ];
+    const legendDiv = document.getElementById('legend-icons');
+    
+    iconTypes.forEach(item => {
+        const svgString = createIconSVG(item.type, 24); 
+        const div = document.createElement('div');
+        div.className = 'legend-item';
+        div.innerHTML = `<span class="menu-item-icon">${svgString}</span> ${item.label}`;
+        legendDiv.appendChild(div);
+    });
+}
+
+// --- WEATHER LEGEND FUNCTIONS ---
+function createWeatherLegend(layerType) {
+    let content = '<strong>Weather Legend:</strong>';
+    let gradient = '';
+    let labels = '';
+    let title = '';
+
+    switch(layerType) {
+        case 'Radar':
+            title = 'Radar Reflectivity (dBZ)';
+            gradient = 'linear-gradient(to right, #00BFFF, #00FF00, #FFFF00, #FF0000, #800080)';
+            labels = '<span>0</span><span>20</span><span>40</span><span>60+</span>';
+            break;
+        case 'Cloud': 
+            title = 'Cloud Top Temperature (K)';
+            gradient = 'linear-gradient(to right, #ffffff, #87CEEB, #1E90FF, #000080)';
+            labels = '<span>300K</span><span>270K</span><span>240K</span><span>210K</span>';
+            break;
+        case 'Wind':
+            title = 'Wind Speed (m/s)';
+            gradient = 'linear-gradient(to right, #ADD8E6, #0000FF, #800080, #FF4500)';
+            labels = '<span>0</span><span>10</span><span>20</span><span>30+</span>';
+            break;
+        case 'Temp':
+            title = 'Air Temperature (°C)';
+            gradient = 'linear-gradient(to right, #0000FF, #00FFFF, #FFFF00, #FF0000)';
+            labels = '<span>-10</span><span>0</span><span>15</span><span>30+</span>';
+            break;
+        case 'Himawari':
+            title = 'Himawari IR (K)';
+            gradient = 'linear-gradient(to right, #FFFFFF, #808080, #000080, #FF0000)';
+            labels = '<span>300K (Low)</span><span>270K</span><span>240K</span><span>210K (High/Cold)</span>';
+            break;
+        default:
+            return '';
+    }
+
+    content += `<p style="margin-top: 5px; margin-bottom: 2px;">${title}</p>`;
+    content += `<div class="legend-bar" style="background: ${gradient};"></div>`;
+    content += `<div class="legend-labels">${labels}</div>`;
+    return content;
+}
+
+function updateWeatherLegend(layerType) {
+    const legendContainer = document.getElementById('legend-container-weather');
+    const legendContent = document.getElementById('weather-legend-content');
+
+    if (layerType) {
+        legendContent.innerHTML = createWeatherLegend(layerType);
+        legendContainer.style.display = 'block';
+        
+        // --- REMOVED DYNAMIC POSITIONING, NOW FIXED BOTTOM-RIGHT VIA CSS ---
+
+    } else {
+        legendContainer.style.display = 'none';
+        legendContent.innerHTML = '';
+    }
+}
+
+
+// --- WEATHER LAYER HANDLERS ---
+
+function clearWeatherLayers(layerToKeep = null){
+  // Stop animation first
+  stopAnimation();
+
+  // Array of all current global weather layer references
+  const allLayerRefs = [
+      { ref: radarLayer, globalName: 'radarLayer' },
+      { ref: cloudLayer, globalName: 'cloudLayer' },
+      { ref: windLayer, globalName: 'windLayer' },
+      { ref: tempLayer, globalName: 'tempLayer' },
+      { ref: himawariLayer, globalName: 'himawariLayer' }
+  ];
+
+  allLayerRefs.forEach(item => {
+    const L = item.ref;
+    if (L && L !== layerToKeep && map.getLayer(L.id)) {
+        map.removeLayer(L.id);
+        if (L.id === 'himawari-layer' && map.getSource('himawari-src')) {
+            try {
+                map.removeSource('himawari-src');
+            } catch(e) {
+                console.warn(`Could not remove Himawari source: ${e.message}`);
+            }
+        }
+    }
+  });
+  
+  // Reset all global layer references
+  radarLayer = cloudLayer = windLayer = tempLayer = himawariLayer = null;
+  activeWeatherLayerRef = null;
+
+  // Reset all weather buttons in the menu
+  document.querySelectorAll('#menu-panel [data-layer]').forEach(btn => {
+      btn.classList.remove("active");
+  });
+
+  // Re-establish the layerToKeep's button state and global reference
+  if (layerToKeep) {
+      activeWeatherLayerRef = layerToKeep;
+      const layerType = layerToKeep.id.split('-')[1]; // e.g., 'radar' from 'layer-radar'
+      const btnId = 'layer-' + layerType;
+      
+      if (document.getElementById(btnId)) {
+        document.getElementById(btnId).classList.add("active");
+      }
+      
+      // Re-assign global reference for persistence (important after style change)
+      if (layerToKeep.id === 'radar-layer') radarLayer = layerToKeep;
+      else if (layerToKeep.id === 'cloud-layer') cloudLayer = layerToKeep;
+      else if (layerToKeep.id === 'wind-layer') windLayer = layerToKeep;
+      else if (layerToKeep.id === 'temp-layer') tempLayer = layerToKeep;
+      else if (layerToKeep.id === 'himawari-layer') himawariLayer = layerToKeep;
+
+      // Update legend for the kept layer
+      updateWeatherLegend(layerType.charAt(0).toUpperCase() + layerType.slice(1));
+      return;
+  }
+
+  // Clear legend if no layer is kept
+  updateWeatherLegend(null);
+}
+
+// Function to handle layer toggling to ensure only one is active
+function toggleLayer(currentRef, constructor, layerType, id, colorramp = null) {
+    // If the layer is currently active, turn it off.
+    if (currentRef) {
+        clearWeatherLayers(); 
+        return null; 
+    } else {
+        // If layer is inactive, clear all others and turn this one on.
+        clearWeatherLayers(); 
+        
+        const options = { opacity: (layerType === 'Cloud' ? 0.9 : 0.8), id: id };
+        if (colorramp) options.colorramp = colorramp;
+
+        const newLayer = new constructor(options);
+        
+        // Add layer *before* the track points layer for proper visibility
+        // track-points-layer is added in loadAllIcons()
+        map.addLayer(newLayer, 'track-points-layer'); 
+        
+        document.getElementById('layer-' + layerType.toLowerCase()).classList.add("active");
+        updateWeatherLegend(layerType);
+        activeWeatherLayerRef = newLayer;
+
+        return newLayer; 
+    }
+}
+
+// --- Menu Click Handlers for Weather Layers ---
+
+document.getElementById("layer-radar").onclick=()=>{
+  radarLayer = toggleLayer(radarLayer, maptilerweather.RadarLayer, 'Radar', 'radar-layer');
+};
+
+document.getElementById("layer-cloud").onclick=()=>{
+  cloudLayer = toggleLayer(cloudLayer, maptilerweather.RadarLayer, 'Cloud', 'cloud-layer', maptilerweather.ColorRamp.builtin.RADAR_CLOUD);
+};
+
+document.getElementById("layer-wind").onclick=()=>{
+  windLayer = toggleLayer(windLayer, maptilerweather.WindLayer, 'Wind', 'wind-layer');
+};
+
+document.getElementById("layer-temp").onclick=()=>{
+  tempLayer = toggleLayer(tempLayer, maptilerweather.TemperatureLayer, 'Temp', 'temp-layer');
+};
+
+document.getElementById("layer-precipitation").onclick = () => {
+    alert("Precipitation layer functionality coming soon! Try Radar or Himawari.");
+};
+document.getElementById("layer-humidity").onclick = () => {
+    alert("Humidity layer functionality coming soon! Try Radar or Himawari.");
+};
+document.getElementById("layer-pressure").onclick = () => {
+    alert("Pressure layer functionality coming soon! Try Radar or Himawari.");
+};
+
+
+document.getElementById("layer-himawari").onclick = () => {
+    if (himawariLayer) {
+        clearWeatherLayers();
+    } else {
+        clearWeatherLayers();
+        handleHimawariToggle();
+    }
+};
+
+function handleHimawariToggle(attempt = 0) {
+    if (attempt > 1) {
+        document.getElementById("layer-himawari").classList.remove("active");
+        updateWeatherLegend(null);
+        alert("Could not load Himawari satellite imagery for the current date. Trying yesterday's image.");
+        return;
+    }
+    
+    const offset = (attempt === 0) ? 0 : -1;
+    const dateToUse = getGIBSDate(offset);
+    const layerID = 'Himawari_AHI_Band13_Clean_Infrared'; 
+    
+    const tileURL = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerID}/default/${dateToUse}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`;
+
+    try {
+        map.addSource('himawari-src', {
+            'type': 'raster',
+            'tiles': [tileURL],
+            'tileSize': 256
+        });
+
+        // Use a simple object reference for Himawari
+        himawariLayer = { id: 'himawari-layer' }; 
+        map.addLayer({
+            'id': himawariLayer.id,
+            'type': 'raster',
+            'source': 'himawari-src',
+            'paint': {
+                'raster-opacity': 0.5
+            }
+        }, 'track-points-layer'); 
+        
+        document.getElementById("layer-himawari").classList.add("active");
+        updateWeatherLegend('Himawari');
+        activeWeatherLayerRef = himawariLayer;
+        
+    } catch(e) {
+        if (map.getLayer('himawari-layer')) map.removeLayer('himawari-layer');
+        if (map.getSource('himawari-src')) map.removeSource('himawari-src');
+        
+        handleHimawariToggle(attempt + 1);
+    }
+}
+
+
+// --- Animation Control Functions ---
+
+function startAnimation() {
+    if (isAnimating) return;
+    isAnimating = true;
+    playPauseButton.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`; // Pause Icon
+    
+    const animatableLayer = activeWeatherLayerRef;
+
+    if (animatableLayer && animatableLayer.animateByFactor) {
+        // Start MapTiler Weather layer animation
+        animatableLayer.animateByFactor(3600); // 1 hour step
+
+        // Update time display every 500ms
+        animationInterval = setInterval(() => {
+            const time = new Date(animatableLayer.getTime());
+            const hours = String(time.getUTCHours()).padStart(2, '0');
+            const minutes = String(time.getUTCMinutes()).padStart(2, '0');
+            const day = time.getUTCDate();
+            const month = time.toLocaleString('en-US', { month: 'short' });
+            animationTimeSpan.textContent = `${day} ${month} ${hours} : ${minutes} Z`;
+        }, 500);
+
+    } else {
+        // Fallback for Himawari/non-Maptiler layers or if none is active
+        alert("Select a live weather layer (Radar, Clouds, Wind, Temp) to animate.");
+        stopAnimation();
+    }
+}
+
+function stopAnimation() {
+    if (!isAnimating) return;
+    isAnimating = false;
+    playPauseButton.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`; // Play Icon
+    
+    if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+    }
+    
+    if (activeWeatherLayerRef && activeWeatherLayerRef.stopAnimation) {
+        activeWeatherLayerRef.stopAnimation();
+    }
+}
+
+// --- Animation Control Event Listeners ---
+playPauseButton.onclick = () => {
+    if (isAnimating) {
+        stopAnimation();
+    } else {
+        startAnimation();
+    }
+};
+
+// Placeholder handlers for prev/next (MapTiler SDK handles time steps automatically in animate mode)
+document.getElementById("anim-prev").onclick = () => {
+    alert("Animation control (prev) not yet implemented for manual stepping.");
+};
+document.getElementById("anim-next").onclick = () => {
+    alert("Animation control (next) not yet implemented for manual stepping.");
+};
+
+// --- Track Toggle Handler ---
+document.getElementById("menu-track-toggle").onclick = () => {
+  if (trackVisible){
+    removeTrackLayers();
+  } else {
+    addTrackLayers();
+  }
+};
+
+
+// --- MAP STYLE SWITCHER HANDLER ---
+document.querySelectorAll('#menu-panel [data-style]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const styleName = e.currentTarget.getAttribute('data-style');
+        let newStyle;
+
+        // 1. Determine the correct MapTiler SDK constant for the style
+        switch(styleName) {
+            case 'SATELLITE':
+                newStyle = maptilersdk.MapStyle.SATELLITE;
+                break;
+            case 'DARK_DATAVIZ': 
+                newStyle = maptilersdk.MapStyle.DATAVIZ.DARK;
+                break;
+            case 'STREETS':
+                newStyle = maptilersdk.MapStyle.STREETS;
+                break;
+            default:
+                newStyle = maptilersdk.MapStyle.SATELLITE;
+                break;
+        }
+        
+        // 2. Stop animation before style change
+        stopAnimation();
+
+        // 3. Set the new style
+        map.setStyle(newStyle);
+        
+        // 4. Update menu active states
+        document.querySelectorAll('#menu-panel [data-style]').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+
+        // 5. Re-add layers after style load
+        map.once('style.load', () => {
+            // Re-add Track
+            if (trackVisible) {
+                // Must remove the source/layer so they can be added to the new style object
+                removeTrackLayers(); 
+                addTrackLayers(); 
+            }
+
+            // Re-add Active Weather Layer (if any)
+            if (activeWeatherLayerRef) {
+                // Determine which layer was active
+                const activeId = activeWeatherLayerRef.id;
+
+                if (activeId === 'himawari-layer') {
+                    // For Himawari (custom source), re-run its full load logic
+                    handleHimawariToggle(0); 
+                } else {
+                    // For MapTiler layers, re-add the existing layer object.
+                    
+                    // Clear all but the active layer (which resets global refs, but activeWeatherLayerRef holds the object)
+                    clearWeatherLayers(activeWeatherLayerRef); 
+                    
+                    // Manually add it back after clearing others, placing it correctly
+                    map.addLayer(activeWeatherLayerRef, 'track-points-layer');
+                    
+                    // Re-assert active state and global reference (done in clearWeatherLayers)
+                }
+            }
+        });
+    });
+});
+
+
+// --- INITIALIZATION FUNCTIONS ---
+
+function loadAllIcons() {
+    return new Promise(resolve => {
+        const iconTypes = [
+            { type: 'PAST', name: 'tc-icon-PAST' }, 
+            { type: 'CURRENT', name: 'tc-icon-CURRENT' }, 
+            { type: 'T', name: 'tc-icon-T' },             
+            { type: 'S', name: 'tc-icon-S' },           
+            { type: 'L', name: 'tc-icon-L' }              
+        ];
+        let loadedCount = 0;
+        const totalIcons = iconTypes.length;
+
+        iconTypes.forEach(icon => {
+            const svgString = createIconSVG(icon.type, 32); 
+            const img = new Image(32, 32);
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+
+            img.onload = () => {
+                if (!map.hasImage(icon.name)) {
+                    map.addImage(icon.name, img, { sdf: false });
+                }
+                loadedCount++;
+                if (loadedCount === totalIcons) {
+                    resolve();
+                }
+            };
+        });
+    });
+}
+
+function updateInitialTime() {
+    const now = new Date();
+    const hours = String(now.getUTCHours()).padStart(2, '0');
+    const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+    const day = now.getUTCDate();
+    const month = now.toLocaleString('en-US', { month: 'short' });
+    animationTimeSpan.textContent = `${day} ${month} ${hours} : ${minutes} Z`;
+}
+
+map.on("load", async ()=>{
+  await loadAllIcons(); 
+
+  // Initialize the track (Visible by default). TrackVisible is set to true initially, so we force the re-add logic.
+  trackVisible = false; 
+  addTrackLayers();
+  
+  // Initialize Radar layer (set as default active layer)
+  radarLayer = new maptilerweather.RadarLayer({opacity:0.6, id: 'radar-layer'});
+  map.addLayer(radarLayer, 'track-points-layer'); 
+  document.getElementById("layer-radar").classList.add("active");
+  activeWeatherLayerRef = radarLayer;
+  updateWeatherLegend('Radar'); 
+  
+  addPopupHandler(); 
+  populateLegend();
+  updateInitialTime(); 
+});
+</script>
+</body>
+</html>
